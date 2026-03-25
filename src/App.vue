@@ -14,110 +14,159 @@ import {
   Zap,
 } from "lucide-vue-next";
 
-// --- 1. 核心狀態與串接變數 ---
+// --- 1. 核心狀態 ---
 const numbers = Array.from({ length: 80 }, (_, i) => i + 1);
 const history = ref([]);
 const activeTab = ref(1);
 const timeLeft = ref(300);
-const isLoading = ref(false); // ⏳ 新增：載入狀態
-const errorMsg = ref(null); // ❌ 新增：錯誤訊息
+const isLoading = ref(false);
+const errorMsg = ref(null);
 
-// 抓真的api
-async function fetchBingoData() {
-  // 你的 GAS 部署網址
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwGE5BAiBdaLCTeyGOLij2mPTiZqNI9JFzzX_nIYeFfnMlRXZQMF3vKN6hmUejAFqDgfQ/exec";
-  
-  // 台彩 API 網址
-  const targetApi = "https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=2026-03&day=2026-03-25";
+// --- 2. 數據抓取引擎 ---
 
+// 抓取「最新一期」
+async function fetchLatestOnly() {
+  const targetUrl = "https://bingo-predictor.zeabur.app/api/v1/draws/latest";
   try {
-    const response = await fetch(`${GAS_URL}?url=${encodeURIComponent(targetApi)}`);
+    const response = await fetch(targetUrl);
     const data = await response.json();
-    
-    renderBingoTable(data);
-  } catch (error) {
-    console.error("抓取失敗:", error);
+
+    const p = parseInt(data.term);
+    const latestDraw = {
+      period: isNaN(p) ? Date.now() : p,
+      numbers: Array.isArray(data.numbers)
+        ? [...data.numbers].sort((a, b) => a - b)
+        : [],
+      //  優化日期顯示：只顯示 月-日 時:分
+      date: `${(data.draw_date || "").slice(5)} ${data.draw_time || ""}`.trim(),
+    };
+
+    if (!history.value.some((h) => h.period === latestDraw.period)) {
+      history.value = [latestDraw, ...history.value];
+    }
+  } catch (e) {
+    console.error("更新最新期數失敗");
   }
 }
 
-// 產生初始數據 (初次進入畫面用)
+// 抓取「50期歷史」(完整修復版)
+async function fetchBingoData() {
+  isLoading.value = true;
+  const targetUrl = `https://bingo-predictor.zeabur.app/api/v1/draws?limit=50&t=${Date.now()}`;
+
+  try {
+    const response = await fetch(targetUrl);
+    const result = await response.json();
+
+    const rawList = Array.isArray(result) ? result : result.draws || [];
+
+    if (rawList.length > 0) {
+      history.value = rawList.map((item) => {
+        const p = parseInt(item.term);
+        return {
+          period: isNaN(p) ? 0 : p,
+          numbers: Array.isArray(item.numbers)
+            ? [...item.numbers].sort((a, b) => a - b)
+            : [],
+          // ✨ 同步優化歷史紀錄的日期顯示
+          date: `${(item.draw_date || "").slice(5)} ${item.draw_time || ""}`.trim(),
+        };
+      });
+      console.log("✅ 真實數據載入成功，最新期:", history.value[0]?.period);
+    } else {
+      generateMockHistory();
+    }
+  } catch (error) {
+    console.error("抓取失敗:", error);
+    if (history.value.length === 0) generateMockHistory();
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// 墊底用的模擬數據
 const generateMockHistory = () => {
   const mock = [];
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 50; i++) {
     const draw = [...numbers]
       .sort(() => Math.random() - 0.5)
       .slice(0, 20)
       .sort((a, b) => a - b);
-    mock.push({ period: 1130100 - i, numbers: draw });
+    mock.push({ period: 115016000 - i, numbers: draw });
   }
   history.value = mock;
 };
 
-// --- 2. 數據分析引擎 ---
+// --- 3. 數據分析引擎 ---
 const stats = computed(() => {
   const totalDraws = history.value.length;
   const hits = {};
-  const omission = {}; // 遺漏值
-  const consecutive = {}; // 連莊次數 (連中幾期)
+  const omission = {};
+  const consecutive = {};
+  const serials = []; // 新增：用來存放連號結果
 
+  // 初始化所有號碼的統計值
   numbers.forEach((n) => {
     hits[n] = 0;
     omission[n] = -1;
     consecutive[n] = 0;
   });
 
-  // 統計熱冷門與遺漏
+  // 1. 計算出現次數與遺漏值
   history.value.forEach((entry, index) => {
+    if (!entry.numbers) return;
     entry.numbers.forEach((n) => {
       hits[n]++;
       if (omission[n] === -1) omission[n] = index;
     });
   });
+
+  // 2. 計算連莊 (連開) 次數
   numbers.forEach((n) => {
     if (omission[n] === -1) omission[n] = totalDraws;
-  });
-
-  // 統計連莊 (從最新一期開始往前算，只要斷掉就停止)
-  numbers.forEach((n) => {
     let count = 0;
     for (let i = 0; i < history.value.length; i++) {
-      if (history.value[i].numbers.includes(n)) count++;
+      if (history.value[i]?.numbers?.includes(n)) count++;
       else break;
     }
     consecutive[n] = count;
   });
 
-  // 排序得出各項指標
-  const hotNumbers = [...numbers].sort((a, b) => hits[b] - hits[a]).slice(0, 5);
-  const coldNumbers = [...numbers]
-    .sort((a, b) => omission[b] - omission[a])
-    .slice(0, 5);
-  const topConsecutive = [...numbers]
-    .sort((a, b) => consecutive[b] - consecutive[a])
-    .slice(0, 5); // 前五名連莊
-
-  // 連號分析 (針對最新一期)
+  // 3. 【核心修正】計算最新一期的「連號」 (例如 05, 06 同時出現)
   const lastDraw = history.value[0]?.numbers || [];
-  const serials = lastDraw.filter((n) => lastDraw.includes(n + 1)).slice(0, 5);
+  if (lastDraw.length > 0) {
+    // 因為 numbers 已經在 fetch 時排序過，所以可以直接比對相鄰數字
+    for (let i = 0; i < lastDraw.length - 1; i++) {
+      if (lastDraw[i + 1] - lastDraw[i] === 1) {
+        if (!serials.includes(lastDraw[i])) serials.push(lastDraw[i]);
+        if (!serials.includes(lastDraw[i + 1])) serials.push(lastDraw[i + 1]);
+      }
+    }
+  }
 
   return {
     hits,
     omission,
-    hotNumbers,
-    coldNumbers,
-    serials,
-    topConsecutive,
+    // 將連號資料丟回回傳物件，讓 HTML 的 v-for="n in stats.serials" 抓得到
+    serials: serials.slice(0, 5),
+    hotNumbers: [...numbers]
+      .sort((a, b) => (hits[b] || 0) - (hits[a] || 0))
+      .slice(0, 5),
+    coldNumbers: [...numbers]
+      .sort((a, b) => (omission[b] || 0) - (omission[a] || 0))
+      .slice(0, 5),
+    topConsecutive: [...numbers]
+      .sort((a, b) => (consecutive[b] || 0) - (consecutive[a] || 0))
+      .slice(0, 5),
     totalDraws,
   };
 });
 
-// --- 4. 介面控制邏輯 (維持不變) ---
+// --- 4. 升級版 AI 綜合權重預測邏輯 ---
 const starCount = ref(3);
 const aiPickedNumbers = ref([]);
 const isCalculating = ref(false);
 
-//=====
-// 選號邏輯
 const aiPick = () => {
   if (isCalculating.value) return;
   isCalculating.value = true;
@@ -193,44 +242,23 @@ const aiPick = () => {
     if (window.navigator.vibrate) window.navigator.vibrate(20);
   }, 400); // 400毫秒的模擬運算時間
 };
-//=====
 
+// 視圖控制
 const viewIndex = ref(0);
-let touchStartX = 0;
-const handleTouchStart = (e) => (touchStartX = e.changedTouches[0].screenX);
-const handleTouchEnd = (e) => {
-  const swipeDist = e.changedTouches[0].screenX - touchStartX;
-  if (swipeDist > 50 && viewIndex.value < history.value.length - 1)
-    viewIndex.value++;
-  else if (swipeDist < -50 && viewIndex.value > 0) viewIndex.value--;
-};
 const changeViewIndex = (step) => {
   const newVal = viewIndex.value + step;
   if (newVal >= 0 && newVal < history.value.length) viewIndex.value = newVal;
 };
 
-// --- 5. 生命週期與計時器 ---
+// --- 5. 生命週期 ---
 let timer;
 onMounted(() => {
-  // 1. 先抓一次初始資料
-  fetchBingoData(); 
-
-  // 2. 每秒執行的精準校時器
+  fetchBingoData();
   timer = setInterval(() => {
     const now = new Date();
-    const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
-
-    // 計算距離下一個「5分鐘倍數」還有幾秒
-    // 例如現在 14:02:10，距離 14:05:00 還有 170 秒
-    const nextFiveMin = (5 - (minutes % 5)) * 60 - seconds;
+    const nextFiveMin = (5 - (now.getMinutes() % 5)) * 60 - now.getSeconds();
     timeLeft.value = nextFiveMin;
-
-    // 當剛好跨入新的一期（倒數剩 0 或是剛好整點）
-    if (nextFiveMin <= 0 || (minutes % 5 === 0 && seconds === 0)) {
-      console.log("⏰ 時間到！正在抓取最新開獎...");
-      fetchBingoData();
-    }
+    if (nextFiveMin === 0) fetchLatestOnly();
   }, 1000);
 });
 
@@ -269,9 +297,7 @@ onUnmounted(() => {
                 (timeLeft % 60).toString().padStart(2, "0")
               }}
             </div>
-
             <div class="w-[1px] h-3 bg-white/20"></div>
-
             <div
               :class="[
                 'transition-all duration-700',
@@ -475,8 +501,11 @@ onUnmounted(() => {
               {{ viewIndex === 0 ? "LATEST (最新期)" : "HISTORY (歷史)" }}
             </p>
             <p class="text-xl font-mono font-black">
-              #{{ history[viewIndex]?.period }}
+              #{{ history[viewIndex]?.period || "------" }}
             </p>
+            <span class="text-[10px] font-medium text-white/50 mt-1">
+              {{ history[viewIndex]?.date }}
+            </span>
           </div>
           <button
             @click="changeViewIndex(1)"
@@ -502,7 +531,7 @@ onUnmounted(() => {
               :key="num"
               class="w-full aspect-square max-w-[48px] mx-auto rounded-full text-base font-black border flex items-center justify-center transition-all duration-300"
               :class="
-                history[viewIndex]?.numbers.includes(num)
+                history[viewIndex]?.numbers?.includes(num)
                   ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] scale-105 z-10'
                   : 'bg-transparent border-white/10 text-white/30 scale-95'
               "
@@ -524,20 +553,16 @@ onUnmounted(() => {
             <thead class="sticky top-0 bg-black z-30 text-white/40 font-mono">
               <tr>
                 <th
-                  class="w-[40px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
+                  class="w-[60px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
                 >
                   <span class="text-[10px] font-black text-cyan-400 p-2"
                     >期數</span
                   >
                 </th>
-
                 <th
                   v-for="n in 80"
                   :key="'th' + n"
-                  :class="[
-                    'w-[18px] p-1 border-b border-white/10 text-center border-l border-white/5 text-[9px] font-bold',
-                    entry?.numbers?.includes(n) ? 'text-rose-500' : '',
-                  ]"
+                  class="w-[18px] p-1 border-b border-white/10 text-center border-l border-white/5 text-[9px] font-bold text-white/40"
                 >
                   {{ n }}
                 </th>
@@ -546,14 +571,17 @@ onUnmounted(() => {
 
             <tbody class="divide-y divide-white/5">
               <tr
-                v-for="entry in history"
-                :key="entry.period"
+                v-for="(entry, index) in history"
+                :key="entry?.period || index"
                 class="hover:bg-white/5 transition-colors group"
               >
                 <td
                   class="pl-2 font-mono text-[10px] text-white/60 bg-neutral-950 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.8)] group-hover:text-white"
                 >
-                  {{ entry.period.toString().slice(-3) }}期
+                  <template v-if="entry && entry.period">
+                    {{ String(entry.period).slice(-3) }}期
+                  </template>
+                  <template v-else> ---期 </template>
                 </td>
 
                 <td
@@ -566,7 +594,7 @@ onUnmounted(() => {
                 >
                   <div class="flex justify-center items-center h-5">
                     <div
-                      v-if="entry.numbers.includes(n)"
+                      v-if="entry?.numbers?.includes(n)"
                       class="w-3.5 h-3.5 rounded-full bg-rose-500 flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.9)] z-10 animate-in zoom-in duration-300"
                     >
                       <span
@@ -574,7 +602,6 @@ onUnmounted(() => {
                         >{{ n }}</span
                       >
                     </div>
-
                     <div v-else class="w-1 h-1 rounded-full bg-white/5"></div>
                   </div>
                 </td>
