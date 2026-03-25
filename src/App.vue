@@ -28,33 +28,38 @@ const fetchBingoData = async () => {
   errorMsg.value = null;
 
   try {
-    const response = await fetch('/api/bingo'); 
-    const data = await response.json();
+    // 1. 定義台彩官方原始 API 網址
+    const now = new Date();
+    const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const dateStr = `${twTime.getUTCFullYear()}-${String(twTime.getUTCMonth() + 1).padStart(2, '0')}-${String(twTime.getUTCDate()).padStart(2, '0')}`;
+    const monthStr = dateStr.substring(0, 7);
+    
+    const targetUrl = `https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=${monthStr}&day=${dateStr}`;
 
-    // 🚩 關鍵修正：台彩的資料是在 data.content 裡面
-    // 並且要判斷資料是否存在，防止 map 報錯
-    if (data && data.content && Array.isArray(data.content)) {
-      
+    // 2. 🚀 使用 CORS Proxy (AllOrigins) 繞過 Vercel IP 封鎖
+    // 這會讓請求看起來像是從這個代理伺服器發出的，而不是 Vercel
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+
+    const response = await fetch(proxyUrl);
+    const wrapper = await response.json();
+    
+    // AllOrigins 會把原始 JSON 放在 .contents 裡面 (注意是字串，要轉成 JSON)
+    const data = JSON.parse(wrapper.contents);
+
+    if (data && data.content && data.content.length > 0) {
       const realHistory = data.content.map(item => ({
-        // 台彩欄位是 drawTerm (期數)
         period: parseInt(item.drawTerm),
-        // 台彩欄位是 resultNos (號碼字串 "01,05,10...")
         numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
       }));
 
-      // 更新歷史紀錄
       history.value = realHistory;
-
-      // 如果有 viewIndex 邏輯，重置到第一筆（最新一期）
-      if (typeof viewIndex !== 'undefined') viewIndex.value = 0;
-
-      console.log(`✅ [${new Date().toLocaleTimeString()}] 實時數據更新成功: ${realHistory[0].period}`);
+      console.log(`✅ [${new Date().toLocaleTimeString()}] 透過代理突圍成功！期數: ${realHistory[0].period}`);
     } else {
-      throw new Error("API 回傳格式不符");
+      throw new Error("API 資料內容為空");
     }
   } catch (err) {
-    errorMsg.value = "數據同步失敗，請稍後再試";
-    console.error("❌ 前端解析錯誤:", err);
+    errorMsg.value = "連線台彩失敗，請檢查網路";
+    console.error("❌ 代理請求出錯:", err);
   } finally {
     isLoading.value = false;
   }
