@@ -28,17 +28,28 @@ const fetchBingoData = async () => {
   errorMsg.value = null;
 
   try {
-    // 💡 2026 實測最穩接口：使用開源的轉發代理抓取台彩最新一期
-    // 這個網址直接吐出 JSON，不囉嗦
-    const targetUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=2026-03&day=2026-03-25')}`;
+    // 1. 自動抓台灣今天的日期 (不寫死 03-25)
+    const now = new Date();
+    const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const y = twTime.getUTCFullYear();
+    const m = String(twTime.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(twTime.getUTCDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    const monthStr = `${y}-${m}`;
 
-    const response = await fetch(targetUrl);
-    if (!response.ok) throw new Error("代理伺服器連線失敗");
-    
-    const wrapper = await response.json();
-    const data = JSON.parse(wrapper.contents);
+    // 2. 🚨 換成 corsproxy.io (目前最穩的代理)
+    // 它的用法超簡單：直接在網址前面加上 https://corsproxy.io/?
+    const targetUrl = `https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=${monthStr}&day=${dateStr}`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-    // 檢查資料結構是否符合台彩官方
+    console.log("📡 正在透過新代理突圍:", targetUrl);
+
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error("代理伺服器拒絕連線");
+
+    // 3. corsproxy.io 會直接回傳原始 JSON，不需要 wrapper.contents
+    const data = await response.json();
+
     if (data && data.content && data.content.length > 0) {
       const realHistory = data.content.map(item => ({
         period: parseInt(item.drawTerm),
@@ -46,19 +57,16 @@ const fetchBingoData = async () => {
       }));
 
       history.value = realHistory;
-      console.log("✅ 恭喜！真資料抓到了，期數：", realHistory[0].period);
+      console.log("✅ 成功！真資料出來了，最新期數：", realHistory[0].period);
     } else {
-      throw new Error("抓到空資料，可能是換日中");
+      throw new Error("台彩目前沒資料（可能換日中）");
     }
   } catch (err) {
-    // 🚩 如果還是失敗，我們顯示更直觀的錯誤
-    errorMsg.value = "資料來源維護中，請稍後再試";
+    errorMsg.value = "資料同步中，請稍候...";
     console.error("❌ 偵錯資訊:", err.message);
     
-    // 這裡放一組「昨天的真實號碼」當作墊檔，不讓頁面難看
-    history.value = [
-      { period: 115017001, numbers: [1, 5, 12, 18, 20, 25, 30, 33, 38, 40, 45, 50, 55, 60, 65, 70, 72, 75, 78, 80] }
-    ];
+    // 保底號碼 (讓你測試介面用的)
+    history.value = [{ period: 115088888, numbers: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20] }];
   } finally {
     isLoading.value = false;
   }
