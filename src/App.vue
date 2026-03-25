@@ -28,7 +28,7 @@ const fetchBingoData = async () => {
   errorMsg.value = null;
 
   try {
-    // 1. 自動校準台灣今日日期 (避免時區導致抓不到資料)
+    // 1. 自動計算台灣今日日期 (避免時區導致抓不到資料)
     const now = new Date();
     const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
     const y = twTime.getUTCFullYear();
@@ -40,31 +40,35 @@ const fetchBingoData = async () => {
     // 台彩官方原始 API 網址
     const targetUrl = `https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=${monthStr}&day=${dateStr}`;
     
-    // 2. 🚀 使用你剛才產生的 Google 私人代理網址
-    const myProxy = "https://script.google.com/macros/s/AKfycbwLrdi0V5lMwrUUXQbFC8vC3995OjFuXfOlyJ5f80XqoUxU6KWcUkGfWZRTHqb4A4yjYw/exec";
+    // 2. 🚀 貼上你最新的 Google 私人代理網址 (確認是剛剛那個 DgfQ 結尾的)
+    const myProxy = "https://script.google.com/macros/s/AKfycbwGE5BAiBdaLCTeyGOLij2mPTiZqNI9JFzzX_nIYeFfnMlRXZQMF3vKN6hmUejAFqDgfQ/exec";
     const finalUrl = `${myProxy}?url=${encodeURIComponent(targetUrl)}`;
 
     console.log("📡 正在透過 Google 私有隧道突圍中...");
 
+    // 💡 關鍵修正：對於 Google Script，使用最簡單的 fetch 即可
     const response = await fetch(finalUrl);
     const data = await response.json();
 
-    // 3. 成功拿到官方真資料後的解析邏輯
+    // 3. 成功拿到真資料後的解析
     if (data && data.content && data.content.length > 0) {
       const realHistory = data.content.map(item => ({
         period: parseInt(item.drawTerm),
         numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
       }));
 
-      // 更新到你的頁面變數中
+      // 更新到頁面
       history.value = realHistory;
-      console.log("✅ [真資料] 終於突圍成功！最新期數：", realHistory[0].period);
+      console.log("✅ 畢業啦！真資料抓到了，最新期數：", realHistory[0].period);
     } else {
       throw new Error("台彩目前沒資料（可能換日中）");
     }
   } catch (err) {
     errorMsg.value = "資料同步中，請稍候...";
     console.error("❌ 偵錯資訊:", err.message);
+    
+    // 測試用保底 (如果看到這個代表連線還是有問題)
+    history.value = [{ period: 115000000, numbers: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20] }];
   } finally {
     isLoading.value = false;
   }
