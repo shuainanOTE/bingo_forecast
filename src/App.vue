@@ -23,51 +23,22 @@ const isLoading = ref(false); // ⏳ 新增：載入狀態
 const errorMsg = ref(null); // ❌ 新增：錯誤訊息
 
 // 抓真的api
-const fetchBingoData = () => {
-  isLoading.value = true;
-  errorMsg.value = null;
-
-  // 1. 準備台灣日期
-  const now = new Date();
-  const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-  const dateStr = `${twTime.getUTCFullYear()}-${String(twTime.getUTCMonth() + 1).padStart(2, '0')}-${String(twTime.getUTCDate()).padStart(2, '0')}`;
-  const monthStr = dateStr.substring(0, 7);
-  const targetUrl = `https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=${monthStr}&day=${dateStr}`;
-
-  // 2. 準備你的 Google 網址
-  const myProxy = "你的 Google Script 網址 (DgfQ 那個)";
-  const callbackName = "bingoCallback_" + Date.now(); // 唯一的暗號
+async function fetchBingoData() {
+  // 你的 GAS 部署網址
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwGE5BAiBdaLCTeyGOLij2mPTiZqNI9JFzzX_nIYeFfnMlRXZQMF3vKN6hmUejAFqDgfQ/exec";
   
-  // 3. 建立 JSONP 請求 (這招瀏覽器絕對攔不住)
-  const script = document.createElement('script');
-  
-  // 定義接到資料後的處理動作
-  window[callbackName] = (data) => {
-    if (data && data.content && data.content.length > 0) {
-      history.value = data.content.map(item => ({
-        period: parseInt(item.drawTerm),
-        numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
-      }));
-      console.log("✅ [JSONP] 突圍成功！期數：", history.value[0].period);
-    } else {
-      errorMsg.value = "目前無開獎資料";
-    }
+  // 台彩 API 網址
+  const targetApi = "https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=2026-03&day=2026-03-25";
+
+  try {
+    const response = await fetch(`${GAS_URL}?url=${encodeURIComponent(targetApi)}`);
+    const data = await response.json();
     
-    // 清理現場
-    document.body.removeChild(script);
-    delete window[callbackName];
-    isLoading.value = false;
-  };
-
-  // 發動攻擊！
-  script.src = `${myProxy}?url=${encodeURIComponent(targetUrl)}&callback=${callbackName}`;
-  script.onerror = () => {
-    errorMsg.value = "連線失敗，請稍後再試";
-    isLoading.value = false;
-  };
-  
-  document.body.appendChild(script);
-};
+    renderBingoTable(data);
+  } catch (error) {
+    console.error("抓取失敗:", error);
+  }
+}
 
 // 產生初始數據 (初次進入畫面用)
 const generateMockHistory = () => {
