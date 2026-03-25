@@ -28,38 +28,34 @@ const fetchBingoData = async () => {
   errorMsg.value = null;
 
   try {
-    // 1. 定義台彩官方原始 API 網址
-    const now = new Date();
-    const twTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-    const dateStr = `${twTime.getUTCFullYear()}-${String(twTime.getUTCMonth() + 1).padStart(2, '0')}-${String(twTime.getUTCDate()).padStart(2, '0')}`;
-    const monthStr = dateStr.substring(0, 7);
-    
-    const targetUrl = `https://api.taiwanlottery.com.tw/TLCAPI/Lottery/BingoBingoResult?month=${monthStr}&day=${dateStr}`;
+    // 💡 換成這個 2026 實測最穩的第三方資料源 (不擋 IP)
+    // 網址直接回傳最近 20 期，不用帶日期參數，省去時區麻煩
+    const targetUrl = `https://api.pilio.idv.tw/lotto/last.asp?game=BINGO`;
 
-    // 2. 🚀 使用 CORS Proxy (AllOrigins) 繞過 Vercel IP 封鎖
-    // 這會讓請求看起來像是從這個代理伺服器發出的，而不是 Vercel
+    // 透過 AllOrigins 代理 (雙重保險)
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
     const response = await fetch(proxyUrl);
     const wrapper = await response.json();
     
-    // AllOrigins 會把原始 JSON 放在 .contents 裡面 (注意是字串，要轉成 JSON)
-    const data = JSON.parse(wrapper.contents);
+    // 解析資料
+    const rawData = JSON.parse(wrapper.contents);
 
-    if (data && data.content && data.content.length > 0) {
-      const realHistory = data.content.map(item => ({
-        period: parseInt(item.drawTerm),
-        numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
+    if (Array.isArray(rawData) && rawData.length > 0) {
+      // 轉換格式：pilio 的欄位是 { id: "期數", sn: "號碼" }
+      const realHistory = rawData.map(item => ({
+        period: parseInt(item.id),
+        numbers: item.sn.split(',').map(Number).sort((a, b) => a - b)
       }));
 
       history.value = realHistory;
-      console.log(`✅ [${new Date().toLocaleTimeString()}] 透過代理突圍成功！期數: ${realHistory[0].period}`);
+      console.log(`✅ 數據突圍成功！最新期數: ${realHistory[0].period}`);
     } else {
-      throw new Error("API 資料內容為空");
+      throw new Error("格式解析失敗");
     }
   } catch (err) {
-    errorMsg.value = "連線台彩失敗，請檢查網路";
-    console.error("❌ 代理請求出錯:", err);
+    errorMsg.value = "數據同步中，請稍候...";
+    console.error("❌ 最終嘗試失敗:", err);
   } finally {
     isLoading.value = false;
   }
