@@ -28,23 +28,33 @@ const fetchBingoData = async () => {
   errorMsg.value = null;
 
   try {
-    // 💡 指向你剛才建立的中繼站
     const response = await fetch('/api/bingo'); 
     const data = await response.json();
 
-    // 格式轉換：假設 API 給的是 { data: [{ drawTerm: "...", resultNos: "01,02..." }] }
-    const realHistory = data.data.map(item => ({
-      period: parseInt(item.drawTerm),
-      numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
-    }));
+    // 🚩 關鍵修正：台彩的資料是在 data.content 裡面
+    // 並且要判斷資料是否存在，防止 map 報錯
+    if (data && data.content && Array.isArray(data.content)) {
+      
+      const realHistory = data.content.map(item => ({
+        // 台彩欄位是 drawTerm (期數)
+        period: parseInt(item.drawTerm),
+        // 台彩欄位是 resultNos (號碼字串 "01,05,10...")
+        numbers: item.resultNos.split(',').map(Number).sort((a, b) => a - b)
+      }));
 
-    // 更新歷史紀錄
-    history.value = realHistory;
+      // 更新歷史紀錄
+      history.value = realHistory;
 
-    console.log(`✅ [${new Date().toLocaleTimeString()}] 實時數據更新成功`);
+      // 如果有 viewIndex 邏輯，重置到第一筆（最新一期）
+      if (typeof viewIndex !== 'undefined') viewIndex.value = 0;
+
+      console.log(`✅ [${new Date().toLocaleTimeString()}] 實時數據更新成功: ${realHistory[0].period}`);
+    } else {
+      throw new Error("API 回傳格式不符");
+    }
   } catch (err) {
-    errorMsg.value = "串接失敗，請檢查 API 狀態";
-    console.error(err);
+    errorMsg.value = "數據同步失敗，請稍後再試";
+    console.error("❌ 前端解析錯誤:", err);
   } finally {
     isLoading.value = false;
   }
