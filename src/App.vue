@@ -416,7 +416,7 @@ const handleSwipeGesture = () => {
       </div>
     </header>
 
-    <main class="flex-1 w-full max-w-xl mx-auto p-4 pb-10">
+    <main class="flex-1 w-full max-w-8xl mx-auto p-4 pb-10">
       <div
         v-if="activeTab === 1"
         class="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
@@ -658,9 +658,9 @@ const handleSwipeGesture = () => {
       <thead class="sticky top-0 bg-black z-30 text-white/40 font-mono">
         <tr>
           <th
-            class="w-[75px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
+            class="w-[85px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
           >
-            <span class="text-[10px] font-black text-cyan-400 p-2 block">期數</span>
+            <span class="text-[10px] font-black text-cyan-400 px-2 block whitespace-nowrap">期數</span>
           </th>
           <th
             v-for="n in 80"
@@ -679,7 +679,7 @@ const handleSwipeGesture = () => {
           class="hover:bg-white/5 transition-colors group"
         >
           <td
-            class="pl-2 font-mono text-[10px] text-white/60 bg-neutral-950 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.8)] group-hover:text-white"
+            class="whitespace-nowrap pl-1 pr-1 font-mono text-[10px] text-white/60 bg-neutral-950 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.8)] group-hover:text-white"
           >
             <template v-if="entry && entry.period">
               {{ String(entry.period).slice(-4) }}期
