@@ -528,7 +528,7 @@ const handleSwipeGesture = () => {
           </div>
 
           <div
-            class="flex flex-wrap gap-2 justify-center min-h-[70px] items-center bg-black/50 p-4 rounded-2xl border border-white/5"
+            class="flex flex-wrap gap-2 justify-center min-h-[70px] items-center bg-black/50 rounded-2xl border border-white/5"
           >
             <template v-if="isCalculating">
               <span
@@ -604,7 +604,7 @@ const handleSwipeGesture = () => {
           class="flex-1 space-y-12 touch-pan-y overflow-y-auto no-scrollbar pb-10"
         >
           <div>
-            <div class="grid grid-cols-10 gap-x-2 gap-y-3 px-2">
+            <div class="grid grid-cols-10 gap-x-2 gap-y-3 px-2 pt-1">
               <div
                 v-for="num in numbers"
                 :key="'cur' + num"
@@ -622,10 +622,10 @@ const handleSwipeGesture = () => {
 
           <div
             v-if="history[viewIndex + 1]"
-            class="pt-2 border-t border-white/5"
+            class="border-t border-white/5"
           >
-            <div class="flex justify-between items-center mb-4 px-4">
-              <span class="text-[14px] font-mono text-white/80"
+            <div class="flex justify-center items-center mb-4 px-4 pb-4">
+              <span class="text-[16px] font-mono text-white/80 font-black"
                 >#{{ history[viewIndex + 1]?.period }}</span
               >
             </div>
