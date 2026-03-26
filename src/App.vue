@@ -162,7 +162,7 @@ const stats = computed(() => {
   };
 });
 
-// --- 4. 升級版 AI 綜合權重預測邏輯 ---
+// --- 4. 升級版 AI 綜合權重預測邏輯 (效能優化版) ---
 const starCount = ref(3);
 const aiPickedNumbers = ref([]);
 const isCalculating = ref(false);
@@ -173,62 +173,85 @@ const aiPick = () => {
   aiPickedNumbers.value = [];
 
   setTimeout(() => {
-    // 取得最新一期開獎號碼 (做為引力與伴隨分析的基準)
     const lastDraw = history.value[0]?.numbers || [];
+    const recent10 = history.value.slice(0, 10);
 
+    // ==========================================
+    // ⚡️ 預處理區 (提升效能，把重複計算拉到 80 次迴圈外)
+    // ==========================================
+
+    // 1. 預先計算上一期的「區塊分佈」 (0~7區)
+    const lastDrawZones = new Array(8).fill(0);
+    lastDraw.forEach((x) => lastDrawZones[Math.floor((x - 1) / 10)]++);
+
+    // 2. 預先計算近 10 期「各號碼的開出次數」
+    const recentHitsCount = new Array(81).fill(0);
+    recent10.forEach((draw) => {
+      draw.numbers.forEach((num) => recentHitsCount[num]++);
+    });
+
+    // 3. 預先計算每一期歷史與「上一期」的相似度 (交集數量)
+    const drawSimilarities = history.value.map((draw) => {
+      return draw.numbers.filter((x) => lastDraw.includes(x)).length;
+    });
+
+    // ==========================================
+    // 🧠 核心權重評分迴圈 (平衡版：冷熱並濟)
+    // ==========================================
     const scoredNumbers = numbers.map((n) => {
       let totalScore = 0;
 
-      // === 模組 1：歷史與遺漏基底 (Mean Reversion) ===
-      // 越久沒開分數越高 (均值回歸)
-      totalScore += stats.value.omission[n] * 1.5;
-      // 保留一點歷史熱度加成
-      totalScore += stats.value.hits[n] * 0.5;
+      // === 模組 1：歷史與遺漏 (削弱冷門霸權) ===
+      // 降低遺漏值的乘數，並設定上限 (最多只採計 15 期)，避免超冷門號碼分數爆表
+      const currentOmission = stats.value.omission[n] || 0;
+      totalScore += Math.min(currentOmission, 15) * 0.8;
+      // 稍微拉高歷史總熱度的底分，尊重長期開出率高的號碼
+      totalScore += (stats.value.hits[n] || 0) * 0.5;
 
-      // === 模組 2：伴隨號分析 (Markov Chain) ===
-      // 如果這顆號碼在歷史上，常跟「上一期開出的號碼」一起出現，就加分
-      if (lastDraw.length > 0) {
-        let companionStrength = 0;
-        history.value.forEach((entry) => {
-          if (entry.numbers.includes(n)) {
-            // 計算這期開獎中，有幾顆是上一期也有的
-            companionStrength += entry.numbers.filter((x) =>
-              lastDraw.includes(x),
-            ).length;
-          }
-        });
-        totalScore += companionStrength * 0.05; // 給予適當權重
-      }
+      // === 模組 2：伴隨號分析 (維持) ===
+      let companionStrength = 0;
+      history.value.forEach((draw, idx) => {
+        if (draw.numbers.includes(n)) {
+          companionStrength += drawSimilarities[idx];
+        }
+      });
+      totalScore += companionStrength * 0.1;
 
-      // === 模組 3：區塊引力分析 (Spatial Analysis) ===
-      // 80碼分8區 (1-10, 11-20...)
+      // === 模組 3：區塊引力 (微調) ===
       const zone = Math.floor((n - 1) / 10);
-      const lastDrawZoneCount = lastDraw.filter(
-        (x) => Math.floor((x - 1) / 10) === zone,
-      ).length;
+      const zoneCount = lastDrawZones[zone];
 
-      if (lastDrawZoneCount < 2) {
-        totalScore += 15; // 上期這區塊開太少，這期強力回補 (大加分)
-      } else if (lastDrawZoneCount > 4) {
-        totalScore -= 10; // 上期這區塊開太多，這期冷卻 (扣分)
+      if (zoneCount <= 1) {
+        totalScore += 8; // 冷區回補 (調降，不要太激進)
+      } else if (zoneCount >= 4) {
+        totalScore -= 10; // 熱區冷卻
       }
 
-      // === 模組 4：短期過熱防守 ===
-      // 計算近 10 期的開出次數
-      const recentHits = history.value
-        .slice(0, 10)
-        .filter((entry) => entry.numbers.includes(n)).length;
+      // === 模組 4：動能與連莊 (✨ 新增：追熱門邏輯) ===
+      const recentHits = recentHitsCount[n];
       if (recentHits >= 4) {
-        totalScore -= 20; // 10期內開4次以上，短期超買必然下修，強力扣分
+        totalScore -= 15; // 防守極度過熱 (稍微調降扣分)
+      } else if (recentHits === 2 || recentHits === 3) {
+        totalScore += 10; // ✨ 近期強勢號碼，順勢推一把 (追熱門)
+      } else if (recentHits === 0) {
+        totalScore += 3; // 極冷同情分 (調降)
       }
 
-      // === 模組 5：隨機擾動 (AI 變異數) ===
-      const randomFactor = Math.random() * 5;
+      // ✨ 連莊加成：如果上一期有開，這期繼續開的「拖牌」機率其實不低
+      if (lastDraw.includes(n)) {
+        totalScore += 5;
+      }
+
+      // === 模組 5：隨機擾動 ===
+      const randomFactor = Math.random() * 8;
       totalScore += randomFactor;
 
       return { n, score: totalScore };
     });
 
+    // ==========================================
+    // 🎯 排序與輸出
+    // ==========================================
     // 依照總分從高到低排序
     scoredNumbers.sort((a, b) => b.score - a.score);
 
@@ -240,7 +263,7 @@ const aiPick = () => {
 
     isCalculating.value = false;
     if (window.navigator.vibrate) window.navigator.vibrate(20);
-  }, 400); // 400毫秒的模擬運算時間
+  }, 400);
 };
 
 // 視圖控制
@@ -265,6 +288,47 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
+
+// --- 左右滑動邏輯變數 ---
+let touchStartX = 0;
+let touchEndX = 0;
+
+// 1. 紀錄手指碰觸螢幕的瞬間位置
+const handleTouchStart = (e) => {
+  touchStartX = e.touches[0].clientX;
+};
+
+// 2. 紀錄手指離開螢幕的位置，並計算滑動距離
+const handleTouchEnd = (e) => {
+  touchEndX = e.changedTouches[0].clientX;
+  handleSwipeGesture();
+};
+
+// 3. 判斷滑動方向並切換期數
+const handleSwipeGesture = () => {
+  const swipeThreshold = 50;
+  const diff = touchStartX - touchEndX;
+
+  if (Math.abs(diff) > swipeThreshold) {
+    if (diff > 0) {
+      // 👈 向左滑（看更舊的）：一次跳 2 期
+      if (viewIndex.value + 2 < history.value.length) {
+        viewIndex.value += 2;
+      } else if (viewIndex.value + 1 < history.value.length) {
+        // 如果只剩一期可以跳，就跳一期
+        viewIndex.value += 1;
+      }
+    } else {
+      // 👉 向右滑（看更新的）：一次跳 2 期
+      if (viewIndex.value - 2 >= 0) {
+        viewIndex.value -= 2;
+      } else if (viewIndex.value - 1 >= 0) {
+        // 如果已經快到最新一期，就跳回 index 0
+        viewIndex.value = 0;
+      }
+    }
+  }
+};
 </script>
 
 <template>
@@ -439,7 +503,7 @@ onUnmounted(() => {
             </h2>
             <select
               v-model="starCount"
-              class="bg-neutral-900 text-white border border-white/20 rounded-lg px-3 py-1 text-sm font-bold outline-none focus:border-cyan-500"
+              class="bg-neutral-900 text-white border border-white/20 rounded-lg px-2 py-2.5 text-sm font-bold outline-none focus:border-cyan-500"
             >
               <option v-for="s in 10" :key="s" :value="s">{{ s }} 星</option>
             </select>
@@ -488,7 +552,7 @@ onUnmounted(() => {
           class="flex justify-between items-center mb-6 bg-neutral-900/50 p-2 rounded-2xl border border-white/5"
         >
           <button
-            @click="changeViewIndex(-1)"
+            @click="viewIndex = Math.max(0, viewIndex - 2)"
             :disabled="viewIndex === 0"
             class="p-3 text-white/50 disabled:opacity-20 active:bg-white/10 rounded-xl"
           >
@@ -508,7 +572,7 @@ onUnmounted(() => {
             </span>
           </div>
           <button
-            @click="changeViewIndex(1)"
+            @click="viewIndex = Math.min(history.length - 1, viewIndex + 2)"
             :disabled="viewIndex === history.length - 1"
             class="p-3 text-white/50 disabled:opacity-20 active:bg-white/10 rounded-xl"
           >
@@ -516,27 +580,50 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <p class="text-center text-[10px] text-white/30 mb-4 tracking-widest">
-          💡 在網格左右滑動切換期數
-        </p>
-
         <div
           @touchstart="handleTouchStart"
           @touchend="handleTouchEnd"
-          class="flex-1 touch-pan-y"
+          class="flex-1 space-y-12 touch-pan-y overflow-y-auto no-scrollbar pb-10"
         >
-          <div class="grid grid-cols-10 md:grid-cols-10 gap-x-2 gap-y-3 px-2">
-            <div
-              v-for="num in numbers"
-              :key="num"
-              class="w-full aspect-square max-w-[48px] mx-auto rounded-full text-base font-black border flex items-center justify-center transition-all duration-300"
-              :class="
-                history[viewIndex]?.numbers?.includes(num)
-                  ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] scale-105 z-10'
-                  : 'bg-transparent border-white/10 text-white/30 scale-95'
-              "
-            >
-              {{ num }}
+          <div>
+            <div class="grid grid-cols-10 gap-x-2 gap-y-3 px-2">
+              <div
+                v-for="num in numbers"
+                :key="'cur' + num"
+                class="w-full aspect-square max-w-[48px] mx-auto rounded-full text-base font-black border flex items-center justify-center transition-all duration-300"
+                :class="
+                  history[viewIndex]?.numbers?.includes(num)
+                    ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] scale-105 z-10'
+                    : 'bg-transparent border-white/10 text-white/30 scale-95'
+                "
+              >
+                {{ num }}
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="history[viewIndex + 1]"
+            class="pt-2 border-t border-white/5"
+          >
+            <div class="flex justify-between items-center mb-4 px-4">
+              <span class="text-[14px] font-mono text-white/80"
+                >#{{ history[viewIndex + 1]?.period }}</span
+              >
+            </div>
+            <div class="grid grid-cols-10 gap-x-2 gap-y-3 px-2">
+              <div
+                v-for="num in numbers"
+                :key="'prev' + num"
+                class="w-full aspect-square max-w-[48px] mx-auto rounded-full text-base font-black border flex items-center justify-center transition-all"
+                :class="
+                  history[viewIndex + 1]?.numbers?.includes(num)
+                    ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.6)] scale-105 z-10'
+                    : 'bg-transparent border-white/10 text-white/30 scale-95'
+                "
+              >
+                {{ num }}
+              </div>
             </div>
           </div>
         </div>
@@ -644,5 +731,9 @@ onUnmounted(() => {
 body {
   background: black;
   overscroll-behavior-y: none;
+}
+select {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 </style>
