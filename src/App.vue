@@ -495,22 +495,40 @@ const handleSwipeGesture = () => {
         <div
           class="bg-neutral-950 p-6 rounded-[2rem] border border-white/10 shadow-2xl mt-8"
         >
-          <div class="flex justify-between items-center mb-6">
+          <div class="flex justify-between items-center mb-4">
             <h2
               class="text-sm font-black tracking-widest uppercase flex items-center gap-2"
             >
               <Cpu class="w-5 h-5 text-cyan-400" /> AI 系統演算
             </h2>
-            <select
-              v-model="starCount"
-              class="bg-neutral-900 text-white border border-white/20 rounded-lg px-2 py-2.5 text-sm font-bold outline-none focus:border-cyan-500"
+            <span class="text-cyan-400 font-mono font-black text-lg"
+              >{{ starCount }}星</span
             >
-              <option v-for="s in 10" :key="s" :value="s">{{ s }} 星</option>
-            </select>
+          </div>
+
+          <div class="mb-6">
+            <div
+              class="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-2"
+            >
+              <button
+                v-for="s in 10"
+                :key="s"
+                @click="starCount = s"
+                type="button"
+                :class="[
+                  'flex-shrink-0 w-12 h-11 rounded-xl font-black transition-all flex items-center justify-center border text-sm',
+                  starCount === s
+                    ? 'bg-cyan-300 text-black border-cyan-300'
+                    : 'bg-neutral-900 text-white/30 border-white/5 active:scale-90',
+                ]"
+              >
+                {{ s }} ★
+              </button>
+            </div>
           </div>
 
           <div
-            class="flex flex-wrap gap-2 justify-center min-h-[60px] items-center bg-black/50 p-4 rounded-2xl border border-white/5"
+            class="flex flex-wrap gap-2 justify-center min-h-[70px] items-center bg-black/50 p-4 rounded-2xl border border-white/5"
           >
             <template v-if="isCalculating">
               <span
@@ -536,7 +554,7 @@ const handleSwipeGesture = () => {
 
           <button
             @click="aiPick"
-            class="w-full mt-6 py-4 rounded-xl bg-white text-black font-black active:scale-95 transition-transform flex justify-center items-center gap-2"
+            class="w-full mt-6 py-4 rounded-2xl bg-white text-black font-black active:scale-[0.97] transition-all flex justify-center items-center gap-2 shadow-xl"
           >
             <Cpu class="w-5 h-5" />
             {{ aiPickedNumbers.length === 0 ? "開始選號" : "重新運算" }}
@@ -629,90 +647,82 @@ const handleSwipeGesture = () => {
         </div>
       </div>
 
-      <div
-        v-if="activeTab === 3"
-        class="flex-1 overflow-hidden flex flex-col p-2"
-      >
-        <div
-          class="flex-1 overflow-auto rounded-xl border border-white/10 bg-neutral-900/20 relative custom-scrollbar"
-        >
-          <table class="border-collapse min-w-[1600px] table-fixed">
-            <thead class="sticky top-0 bg-black z-30 text-white/40 font-mono">
-              <tr>
-                <th
-                  class="w-[60px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
-                >
-                  <span class="text-[10px] font-black text-cyan-400 p-2"
-                    >期數</span
-                  >
-                </th>
-                <th
-                  v-for="n in 80"
-                  :key="'th' + n"
-                  class="w-[18px] p-1 border-b border-white/10 text-center border-l border-white/5 text-[9px] font-bold text-white/40"
-                >
-                  {{ n }}
-                </th>
-              </tr>
-            </thead>
-
-            <tbody class="divide-y divide-white/5">
-              <tr
-                v-for="(entry, index) in history"
-                :key="entry?.period || index"
-                class="hover:bg-white/5 transition-colors group"
-              >
-                <td
-                  class="pl-2 font-mono text-[10px] text-white/60 bg-neutral-950 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.8)] group-hover:text-white"
-                >
-                  <template v-if="entry && entry.period">
-                    {{ String(entry.period).slice(-3) }}期
-                  </template>
-                  <template v-else> ---期 </template>
-                </td>
-
-                <td
-                  v-for="n in 80"
-                  :key="n"
-                  :class="[
-                    'p-0 border-l border-white/5 relative',
-                    n % 10 === 0 ? 'bg-white/[0.02]' : '',
-                  ]"
-                >
-                  <div class="flex justify-center items-center h-5">
-                    <div
-                      v-if="entry?.numbers?.includes(n)"
-                      class="w-3.5 h-3.5 rounded-full bg-rose-500 flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.9)] z-10 animate-in zoom-in duration-300"
-                    >
-                      <span
-                        class="text-[7px] font-black text-black leading-none"
-                        >{{ n }}</span
-                      >
-                    </div>
-                    <div v-else class="w-1 h-1 rounded-full bg-white/5"></div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="py-2 flex justify-between px-4 items-center">
-          <span class="text-[8px] text-white/20 tracking-[0.2em]"
-            >⬅️ 左右滑動搜尋 1-80 號 ➡️</span
+<div
+  v-if="activeTab === 3"
+  class="flex-1 overflow-hidden flex flex-col w-full"
+>
+  <div
+    class="flex-1 overflow-auto rounded-xl border border-white/10 bg-neutral-900/20 relative custom-scrollbar mx-2 mb-1"
+  >
+    <table class="border-collapse w-full table-auto">
+      <thead class="sticky top-0 bg-black z-30 text-white/40 font-mono">
+        <tr>
+          <th
+            class="w-[75px] border-b border-white/10 text-left sticky left-0 bg-black shadow-[4px_0_10px_rgba(0,0,0,0.8)] z-40"
           >
-          <div class="flex gap-2">
-            <div class="flex items-center gap-1">
-              <div class="w-2 h-2 rounded-full bg-rose-500"></div>
-              <span class="text-[8px] text-white/40">已開出</span>
+            <span class="text-[10px] font-black text-cyan-400 p-2 block">期數</span>
+          </th>
+          <th
+            v-for="n in 80"
+            :key="'th' + n"
+            class="min-w-[18px] p-1 border-b border-white/10 text-center border-l border-white/5 text-[9px] font-bold text-white/40"
+          >
+            {{ n }}
+          </th>
+        </tr>
+      </thead>
+
+      <tbody class="divide-y divide-white/5">
+        <tr
+          v-for="(entry, index) in history"
+          :key="entry?.period || index"
+          class="hover:bg-white/5 transition-colors group"
+        >
+          <td
+            class="pl-2 font-mono text-[10px] text-white/60 bg-neutral-950 sticky left-0 z-20 shadow-[4px_0_10px_rgba(0,0,0,0.8)] group-hover:text-white"
+          >
+            <template v-if="entry && entry.period">
+              {{ String(entry.period).slice(-4) }}期
+            </template>
+            <template v-else> ----期 </template>
+          </td>
+
+          <td
+            v-for="n in 80"
+            :key="n"
+            :class="[
+              'p-0 border-l border-white/5 relative',
+              n % 10 === 0 ? 'bg-white/[0.02]' : '',
+            ]"
+          >
+            <div class="flex justify-center items-center h-5"> <div
+                v-if="entry?.numbers?.includes(n)"
+                class="w-3.5 h-3.5 rounded-full bg-rose-500 flex items-center justify-center shadow-[0_0_12px_rgba(244,63,94,0.9)] z-10 animate-in zoom-in duration-300"
+              >
+                <span class="text-[7px] font-black text-black leading-none">{{ n }}</span>
+              </div>
+              <div v-else class="w-1 h-1 rounded-full bg-white/5"></div>
             </div>
-            <div class="flex items-center gap-1">
-              <div class="w-2 h-2 rounded-full bg-white/10"></div>
-              <span class="text-[8px] text-white/40">未開出</span>
-            </div>
-          </div>
-        </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="py-1.5 flex justify-between px-4 items-center bg-black/40">
+    <span class="text-[8px] text-white/20 tracking-[0.2em]">⬅️ SWIPE 1-80 MATRIX ➡️</span>
+    <div class="flex gap-3">
+      <div class="flex items-center gap-1">
+        <div class="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
+        <span class="text-[8px] text-white/40">已開出</span>
       </div>
+      <div class="flex items-center gap-1">
+        <div class="w-1.5 h-1.5 rounded-full bg-white/10"></div>
+        <span class="text-[8px] text-white/40">未開出</span>
+      </div>
+    </div>
+  </div>
+</div>
     </main>
   </div>
 </template>
@@ -732,8 +742,31 @@ body {
   background: black;
   overscroll-behavior-y: none;
 }
-select {
+</style>
+
+<style scoped>
+/* 1. 移除手機瀏覽器點擊時的預設「藍色方塊」與延遲感 */
+button {
   -webkit-tap-highlight-color: transparent;
   outline: none;
+  user-select: none; /* 防止長按選中文字 */
+}
+
+/* 2. 讓 1-10 星的橫向滑動區塊隱藏捲動條，看起來更高級 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* 3. 確保動畫順暢 (Tailwind animate-in 如果沒生效可以用這個) */
+.zoom-in {
+  animation: zoom-in 0.2s ease-out;
+}
+@keyframes zoom-in {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
 }
 </style>
